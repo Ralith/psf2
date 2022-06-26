@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(feature = "std")]
+extern crate std;
+
 #[derive(Copy, Clone)]
 pub struct Font<Data> {
     data: Data,
@@ -83,6 +86,19 @@ pub enum ParseError {
     /// Missing magic number; probably not PSF data.
     BadMagic,
 }
+
+#[cfg(feature = "std")]
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        f.pad(match *self {
+            ParseError::UnexpectedEnd => "unexpected end",
+            ParseError::BadMagic => "bad magic number",
+        })
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseError {}
 
 #[derive(Copy, Clone)]
 pub struct Glyph<'a> {
