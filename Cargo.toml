@@ -1,0 +1,10 @@
+[package]
+name = "psf2"
+version = "0.1.0"
+description = "Minimal, unopinionated PSF2 bitmap font parser"
+edition = "2021"
+license = "MIT OR Apache-2.0 OR Zlib"
+repository = "https://github.com/Ralith/psf2"
+readme = "README.md"
+keywords = ["font", "text", "psf"]
+categories = ["graphics", "no-std"]
