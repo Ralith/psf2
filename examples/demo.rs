@@ -21,7 +21,7 @@ fn main() {
                 continue;
             }
         };
-        for row in glyph.rows() {
+        for row in glyph {
             for column in row {
                 let x = match column {
                     true => '█',

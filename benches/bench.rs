@@ -12,7 +12,7 @@ fn rasterize(b: &mut Bencher) {
     let glyph = font.get('A').unwrap();
     let mut buf = [0u32; 6 * 12];
     b.iter(|| {
-        for (row_index, row) in glyph.rows().enumerate() {
+        for (row_index, row) in glyph.clone().enumerate() {
             for (column_index, column) in row.enumerate() {
                 if column {
                     buf[row_index * 6 + column_index] = u32::MAX;

@@ -64,17 +64,17 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         u32::from_le_bytes(self.data.as_ref()[28..32].try_into().unwrap())
     }
 
-    pub fn get(&self, c: char) -> Option<Glyph<'_>> {
+    pub fn get(&self, c: char) -> Option<RowIter<'_>> {
         // TODO: Unicode translation
         let index = c as u32;
-        if index >= self.length() {
-            return None;
-        }
-        Some(Glyph {
-            font: Font {
-                data: self.data.as_ref(),
-            },
-            index,
+        let offset = self.headersize() + index * self.charsize();
+        let data = self
+            .data
+            .as_ref()
+            .get(offset as usize..(offset + self.charsize()) as usize)?;
+        Some(RowIter {
+            data,
+            width: self.width() as usize,
         })
     }
 }
@@ -99,36 +99,6 @@ impl std::fmt::Display for ParseError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for ParseError {}
-
-#[derive(Copy, Clone)]
-pub struct Glyph<'a> {
-    font: Font<&'a [u8]>,
-    index: u32,
-}
-
-impl<'a> Glyph<'a> {
-    #[inline]
-    pub fn rows(&self) -> RowIter<'a> {
-        let font = self.font;
-        let start = font.headersize() + self.index * font.charsize();
-        let data = &font.data[start as usize..(start + font.charsize()) as usize];
-
-        RowIter {
-            data,
-            width: font.width() as usize,
-        }
-    }
-}
-
-impl<'a> IntoIterator for Glyph<'a> {
-    type IntoIter = RowIter<'a>;
-    type Item = ColumnIter<'a>;
-
-    #[inline]
-    fn into_iter(self) -> RowIter<'a> {
-        self.rows()
-    }
-}
 
 #[derive(Clone)]
 pub struct RowIter<'a> {
