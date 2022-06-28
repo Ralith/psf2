@@ -128,7 +128,7 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         // Encode UTF-8
         let c = c as u32;
         let mut buf = [0u8; 4];
-        let len = if c < 0x7F {
+        let len = if c <= 0x7F {
             return self.get_ascii(c as u8);
         } else if c <= 0x07FF {
             buf[0] = 0xC0 | ((c >> 6) as u8 & 0x1F);
