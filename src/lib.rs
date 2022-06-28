@@ -54,35 +54,29 @@ impl<Data: AsRef<[u8]>> Font<Data> {
 
         #[cfg(feature = "unicode")]
         if result.flags() & 0x01 != 0 {
-            let mut table = &result.data.as_ref()[glyphs_end..];
-            for index in 0..result.length() {
-                let end = match table.iter().position(|&x| x == 0xFF) {
-                    Some(x) => x,
-                    None => break,
-                };
-                let (mut row, rest) = table.split_at(end);
-                table = &rest[1..]; // Skip terminator
-                let mut first_row = true;
-                while !row.is_empty() {
-                    let end = match row.iter().position(|&x| x == 0xFE) {
-                        Some(x) => x,
-                        None => row.len(),
-                    };
-                    let (section, rest) = row.split_at(end);
-                    row = rest.get(1..).unwrap_or(&[]);
-                    let s = match core::str::from_utf8(section) {
-                        Ok(x) => x,
-                        Err(_) => continue,
-                    };
-                    if core::mem::replace(&mut first_row, false) {
-                        // Separate
-                        for c in s.chars() {
-                            result.unicode.insert(c.into(), index);
+            let table = &result.data.as_ref()[glyphs_end..];
+            let mut index = 0;
+            let mut start = 0;
+            let mut in_sequence = false;
+            for (i, &x) in table.iter().enumerate() {
+                if x == 0xFF || x == 0xFE {
+                    let slice = &table[start..i];
+                    if let Ok(s) = core::str::from_utf8(slice) {
+                        if in_sequence {
+                            result.unicode.insert(s.into(), index);
+                        } else {
+                            for c in s.chars() {
+                                result.unicode.insert(c.into(), index);
+                            }
                         }
-                    } else {
-                        // Single sequence
-                        result.unicode.insert(s.into(), index);
                     }
+
+                    start = i + 1;
+                    in_sequence = true;
+                }
+                if x == 0xFF {
+                    index += 1;
+                    in_sequence = false;
                 }
             }
         }
