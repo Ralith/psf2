@@ -1,14 +1,19 @@
+//! Parser for v2 [PC Screen Fonts](https://www.win.tue.nl/~aeb/linux/kbd/font-formats-1.html),
+//! bitmap fonts which are simple and fast to draw.
+
 #![no_std]
 
 #[cfg(feature = "std")]
 extern crate std;
 
+/// A well-formed PSF2 font
 #[derive(Copy, Clone)]
 pub struct Font<Data> {
     data: Data,
 }
 
 impl<Data: AsRef<[u8]>> Font<Data> {
+    /// Try to parse `data` as a PSF2 font
     pub fn new(data: Data) -> Result<Self, ParseError> {
         let bytes = data.as_ref();
         let header = bytes.get(0..8 * 4).ok_or(ParseError::UnexpectedEnd)?;
@@ -54,16 +59,19 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         u32::from_le_bytes(self.data.as_ref()[20..24].try_into().unwrap())
     }
 
+    /// Number of rows in a glyph
     #[inline]
     pub fn height(&self) -> u32 {
         u32::from_le_bytes(self.data.as_ref()[24..28].try_into().unwrap())
     }
 
+    /// Number of columns in a glyph
     #[inline]
     pub fn width(&self) -> u32 {
         u32::from_le_bytes(self.data.as_ref()[28..32].try_into().unwrap())
     }
 
+    /// Get an iterator over the rows of the glyph bitmap for `c`, if present
     pub fn get(&self, c: char) -> Option<RowIter<'_>> {
         // TODO: Unicode translation
         let index = c as u32;
@@ -79,6 +87,7 @@ impl<Data: AsRef<[u8]>> Font<Data> {
     }
 }
 
+/// Why data might not be a valid PSF2 font
 #[derive(Debug, Copy, Clone)]
 pub enum ParseError {
     /// Input data ended prematurely
@@ -100,6 +109,7 @@ impl std::fmt::Display for ParseError {
 #[cfg(feature = "std")]
 impl std::error::Error for ParseError {}
 
+/// Iterator over each row of a glyph
 #[derive(Clone)]
 pub struct RowIter<'a> {
     data: &'a [u8],
@@ -153,6 +163,9 @@ impl<'a> DoubleEndedIterator for RowIter<'a> {
     }
 }
 
+/// Iterator over each column within a single row of a glyph
+///
+/// Yields whether the pixel at each position should be filled.
 #[derive(Clone)]
 pub struct ColumnIter<'a> {
     data: &'a [u8],
