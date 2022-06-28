@@ -9,7 +9,7 @@ const FONT: &[u8] = include_bytes!("../Tamzen6x12.psf");
 
 fn rasterize(b: &mut Bencher) {
     let font = Font::new(FONT).unwrap();
-    let glyph = font.get('A').unwrap();
+    let glyph = font.get_ascii(b'A').unwrap();
     let mut buf = [0u32; 6 * 12];
     b.iter(|| {
         for (row_index, row) in glyph.clone().enumerate() {

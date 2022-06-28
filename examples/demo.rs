@@ -14,7 +14,7 @@ fn main() {
         None => "demo",
     };
     for c in text.chars() {
-        let glyph = match font.get(c) {
+        let glyph = match font.get_unicode(c) {
             Some(x) => x,
             None => {
                 eprintln!("missing glyph: {}", c);

@@ -6,10 +6,22 @@
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(feature = "unicode")]
+extern crate alloc;
+
+#[cfg(feature = "unicode")]
+use alloc::string::String;
+#[cfg(feature = "unicode")]
+use hashbrown::HashMap;
+#[cfg(feature = "unicode")]
+use rustc_hash::FxHasher;
+
 /// A well-formed PSF2 font
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Font<Data> {
     data: Data,
+    #[cfg(feature = "unicode")]
+    unicode: HashMap<String, u32, core::hash::BuildHasherDefault<FxHasher>>,
 }
 
 impl<Data: AsRef<[u8]>> Font<Data> {
@@ -21,7 +33,11 @@ impl<Data: AsRef<[u8]>> Font<Data> {
             return Err(ParseError::BadMagic);
         }
 
-        let result = Self { data };
+        let mut result = Self {
+            data,
+            #[cfg(feature = "unicode")]
+            unicode: HashMap::default(),
+        };
 
         let glyphs_size = result
             .charsize()
@@ -30,10 +46,45 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         let glyphs_end = result
             .headersize()
             .checked_add(glyphs_size)
-            .ok_or(ParseError::UnexpectedEnd)?;
+            .ok_or(ParseError::UnexpectedEnd)? as usize;
 
-        if glyphs_end as usize > result.data.as_ref().len() {
+        if glyphs_end > result.data.as_ref().len() {
             return Err(ParseError::UnexpectedEnd);
+        }
+
+        #[cfg(feature = "unicode")]
+        if result.flags() & 0x01 != 0 {
+            let mut table = &result.data.as_ref()[glyphs_end..];
+            for index in 0..result.length() {
+                let end = match table.iter().position(|&x| x == 0xFF) {
+                    Some(x) => x,
+                    None => break,
+                };
+                let (mut row, rest) = table.split_at(end);
+                table = &rest[1..]; // Skip terminator
+                let mut first_row = true;
+                while !row.is_empty() {
+                    let end = match row.iter().position(|&x| x == 0xFE) {
+                        Some(x) => x,
+                        None => row.len(),
+                    };
+                    let (section, rest) = row.split_at(end);
+                    row = rest.get(1..).unwrap_or(&[]);
+                    let s = match core::str::from_utf8(section) {
+                        Ok(x) => x,
+                        Err(_) => continue,
+                    };
+                    if core::mem::replace(&mut first_row, false) {
+                        // Separate
+                        for c in s.chars() {
+                            result.unicode.insert(c.into(), index);
+                        }
+                    } else {
+                        // Single sequence
+                        result.unicode.insert(s.into(), index);
+                    }
+                }
+            }
         }
 
         Ok(result)
@@ -44,10 +95,10 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         u32::from_le_bytes(self.data.as_ref()[8..12].try_into().unwrap())
     }
 
-    // #[inline]
-    // fn flags(&self) -> u32 {
-    //     u32::from_le_bytes(self.data.as_ref()[12..16].try_into().unwrap())
-    // }
+    #[inline]
+    fn flags(&self) -> u32 {
+        u32::from_le_bytes(self.data.as_ref()[12..16].try_into().unwrap())
+    }
 
     #[inline]
     fn length(&self) -> u32 {
@@ -71,11 +122,58 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         u32::from_le_bytes(self.data.as_ref()[28..32].try_into().unwrap())
     }
 
-    /// Get an iterator over the rows of the glyph bitmap for `c`, if present
-    pub fn get(&self, c: char) -> Option<RowIter<'_>> {
-        // TODO: Unicode translation
-        let index = c as u32;
-        let offset = self.headersize() + index * self.charsize();
+    /// Get an iterator over the rows of the glyph bitmap for ASCII char `c`, if present
+    #[inline]
+    pub fn get_ascii(&self, c: u8) -> Option<RowIter<'_>> {
+        self.get_index(c as u32)
+    }
+
+    /// Like [`get_ascii`], but for a unicode scalar value
+    #[cfg(feature = "unicode")]
+    pub fn get_unicode(&self, c: char) -> Option<RowIter<'_>> {
+        // Encode UTF-8
+        let c = c as u32;
+        let mut buf = [0u8; 4];
+        let len = if c < 0x7F {
+            return self.get_ascii(c as u8);
+        } else if c <= 0x07FF {
+            buf[0] = 0xC0 | ((c >> 6) as u8 & 0x1F);
+            buf[1] = 0x80 | (c & 0x3F) as u8;
+            2
+        } else if c <= 0xFFFF {
+            buf[0] = 0xE0 | ((c >> 12) as u8 & 0x0F);
+            buf[1] = 0x80 | ((c >> 6) as u8 & 0x3F);
+            buf[2] = 0x80 | (c as u8 & 0x3F);
+            3
+        } else if c <= 0x10FFFF {
+            buf[0] = 0xF0 | ((c >> 18) as u8 & 0x07);
+            buf[1] = 0x80 | ((c >> 12) as u8 & 0x3F);
+            buf[2] = 0x80 | ((c >> 6) as u8 & 0x3F);
+            buf[3] = 0x80 | (c as u8 & 0x3F);
+            4
+        } else {
+            // Invalid Unicode; unreachable?
+            return None;
+        };
+        self.get_unicode_composed(core::str::from_utf8(&buf[..len]).unwrap())
+    }
+
+    /// Like [`get_unicode`], but for one or more Unicode codepoints corresponding to a single glyph
+    #[cfg(feature = "unicode")]
+    pub fn get_unicode_composed(&self, seq: &str) -> Option<RowIter<'_>> {
+        let index = self.unicode.get(seq).copied().or_else(|| {
+            if seq.is_ascii() && seq.len() == 1 {
+                seq.chars().next().map(|x| x as u32)
+            } else {
+                None
+            }
+        })?;
+        self.get_index(index)
+    }
+
+    #[inline]
+    fn get_index(&self, i: u32) -> Option<RowIter<'_>> {
+        let offset = self.headersize() + i * self.charsize();
         let data = self
             .data
             .as_ref()
