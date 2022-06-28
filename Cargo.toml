@@ -1,6 +1,6 @@
 [package]
 name = "psf2"
-version = "0.1.1"
+version = "0.1.2"
 description = "Minimal, unopinionated PSF2 bitmap font parser"
 edition = "2021"
 license = "MIT OR Apache-2.0 OR Zlib"
@@ -12,3 +12,13 @@ categories = ["graphics", "no-std"]
 [features]
 default = ["std"]
 std = []
+
+[dev-dependencies]
+bencher = "0.1.5"
+
+[[bench]]
+name = "bench"
+harness = false
+
+[profile.bench]
+debug = true
