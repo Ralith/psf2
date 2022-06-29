@@ -118,13 +118,13 @@ impl<Data: AsRef<[u8]>> Font<Data> {
 
     /// Get an iterator over the rows of the glyph bitmap for ASCII char `c`, if present
     #[inline]
-    pub fn get_ascii(&self, c: u8) -> Option<RowIter<'_>> {
+    pub fn get_ascii(&self, c: u8) -> Option<Glyph<'_>> {
         self.get_index(c as u32)
     }
 
     /// Like [`get_ascii`](Self::get_ascii), but for a unicode scalar value
     #[cfg(feature = "unicode")]
-    pub fn get_unicode(&self, c: char) -> Option<RowIter<'_>> {
+    pub fn get_unicode(&self, c: char) -> Option<Glyph<'_>> {
         // Encode UTF-8
         let c = c as u32;
         let mut buf = [0u8; 4];
@@ -154,7 +154,7 @@ impl<Data: AsRef<[u8]>> Font<Data> {
 
     /// Like [`get_unicode`](Self::get_unicode), but for one or more Unicode codepoints corresponding to a single glyph
     #[cfg(feature = "unicode")]
-    pub fn get_unicode_composed(&self, seq: &str) -> Option<RowIter<'_>> {
+    pub fn get_unicode_composed(&self, seq: &str) -> Option<Glyph<'_>> {
         let index = self.unicode.get(seq).copied().or_else(|| {
             if seq.is_ascii() && seq.len() == 1 {
                 seq.chars().next().map(|x| x as u32)
@@ -166,13 +166,13 @@ impl<Data: AsRef<[u8]>> Font<Data> {
     }
 
     #[inline]
-    fn get_index(&self, i: u32) -> Option<RowIter<'_>> {
+    fn get_index(&self, i: u32) -> Option<Glyph<'_>> {
         let offset = self.headersize() + i * self.charsize();
         let data = self
             .data
             .as_ref()
             .get(offset as usize..(offset + self.charsize()) as usize)?;
-        Some(RowIter {
+        Some(Glyph {
             data,
             width: self.width() as usize,
         })
@@ -203,12 +203,12 @@ impl std::error::Error for ParseError {}
 
 /// Iterator over each row of a glyph
 #[derive(Clone)]
-pub struct RowIter<'a> {
+pub struct Glyph<'a> {
     data: &'a [u8],
     width: usize,
 }
 
-impl<'a> RowIter<'a> {
+impl<'a> Glyph<'a> {
     /// The raw data defining the glyph, minus any portions already iterated through
     ///
     /// Initially [`Font::height`] rows of [`Font::width`] bits, each row padded to a whole number
@@ -218,17 +218,17 @@ impl<'a> RowIter<'a> {
     }
 }
 
-impl<'a> Iterator for RowIter<'a> {
-    type Item = ColumnIter<'a>;
+impl<'a> Iterator for Glyph<'a> {
+    type Item = GlyphRow<'a>;
     #[inline]
-    fn next(&mut self) -> Option<ColumnIter<'a>> {
+    fn next(&mut self) -> Option<GlyphRow<'a>> {
         let advance = (self.width + 7) / 8;
         if self.data.len() < advance {
             return None;
         }
         let (next, rest) = self.data.split_at(advance);
         self.data = rest;
-        Some(ColumnIter {
+        Some(GlyphRow {
             data: next,
             bit: 0,
             width: self.width,
@@ -241,23 +241,23 @@ impl<'a> Iterator for RowIter<'a> {
     }
 }
 
-impl ExactSizeIterator for RowIter<'_> {
+impl ExactSizeIterator for Glyph<'_> {
     #[inline]
     fn len(&self) -> usize {
         self.data.len() / self.width
     }
 }
 
-impl<'a> DoubleEndedIterator for RowIter<'a> {
+impl<'a> DoubleEndedIterator for Glyph<'a> {
     #[inline]
-    fn next_back(&mut self) -> Option<ColumnIter<'a>> {
+    fn next_back(&mut self) -> Option<GlyphRow<'a>> {
         let advance = (self.width + 7) / 8;
         if self.data.len() < advance {
             return None;
         }
         let (rest, next) = self.data.split_at(self.data.len() - advance);
         self.data = rest;
-        Some(ColumnIter {
+        Some(GlyphRow {
             data: next,
             bit: 0,
             width: self.width,
@@ -269,13 +269,13 @@ impl<'a> DoubleEndedIterator for RowIter<'a> {
 ///
 /// Yields whether the pixel at each position should be filled.
 #[derive(Clone)]
-pub struct ColumnIter<'a> {
+pub struct GlyphRow<'a> {
     data: &'a [u8],
     bit: usize,
     width: usize,
 }
 
-impl<'a> ColumnIter<'a> {
+impl<'a> GlyphRow<'a> {
     /// A bitfield defining the filled pixels in this row of the glyph
     ///
     /// The most significant bit corresponds to the leftmost pixel. Only the first [`Font::width`]
@@ -285,7 +285,7 @@ impl<'a> ColumnIter<'a> {
     }
 }
 
-impl<'a> Iterator for ColumnIter<'a> {
+impl<'a> Iterator for GlyphRow<'a> {
     type Item = bool;
 
     #[inline]
@@ -308,14 +308,14 @@ impl<'a> Iterator for ColumnIter<'a> {
     }
 }
 
-impl ExactSizeIterator for ColumnIter<'_> {
+impl ExactSizeIterator for GlyphRow<'_> {
     #[inline]
     fn len(&self) -> usize {
         self.width - self.bit
     }
 }
 
-impl<'a> DoubleEndedIterator for ColumnIter<'a> {
+impl<'a> DoubleEndedIterator for GlyphRow<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<bool> {
         if self.bit >= self.width {
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn column_correctness() {
-        let it = ColumnIter {
+        let it = GlyphRow {
             data: &[3, 0],
             bit: 0,
             width: 9,
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn reverse_column() {
-        let it = ColumnIter {
+        let it = GlyphRow {
             data: &[3, 0],
             bit: 0,
             width: 9,
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn row_correctness() {
-        let it = RowIter {
+        let it = Glyph {
             data: &[128, 0],
             width: 1,
         };
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn reverse_row() {
-        let it = RowIter {
+        let it = Glyph {
             data: &[128, 0],
             width: 1,
         };
