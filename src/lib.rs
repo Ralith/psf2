@@ -208,6 +208,16 @@ pub struct RowIter<'a> {
     width: usize,
 }
 
+impl<'a> RowIter<'a> {
+    /// The raw data defining the glyph, minus any portions already iterated through
+    ///
+    /// Initially [`Font::height`] rows of [`Font::width`] bits, each row padded to a whole number
+    /// of bytes.
+    pub fn data(&self) -> &'a [u8] {
+        self.data
+    }
+}
+
 impl<'a> Iterator for RowIter<'a> {
     type Item = ColumnIter<'a>;
     #[inline]
@@ -263,6 +273,16 @@ pub struct ColumnIter<'a> {
     data: &'a [u8],
     bit: usize,
     width: usize,
+}
+
+impl<'a> ColumnIter<'a> {
+    /// A bitfield defining the filled pixels in this row of the glyph
+    ///
+    /// The most significant bit corresponds to the leftmost pixel. Only the first [`Font::width`]
+    /// bits are meaningful.
+    pub fn data(&self) -> &'a [u8] {
+        self.data
+    }
 }
 
 impl<'a> Iterator for ColumnIter<'a> {
