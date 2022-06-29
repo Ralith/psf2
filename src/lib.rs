@@ -122,7 +122,7 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         self.get_index(c as u32)
     }
 
-    /// Like [`get_ascii`], but for a unicode scalar value
+    /// Like [`get_ascii`](Self::get_ascii), but for a unicode scalar value
     #[cfg(feature = "unicode")]
     pub fn get_unicode(&self, c: char) -> Option<RowIter<'_>> {
         // Encode UTF-8
@@ -152,7 +152,7 @@ impl<Data: AsRef<[u8]>> Font<Data> {
         self.get_unicode_composed(core::str::from_utf8(&buf[..len]).unwrap())
     }
 
-    /// Like [`get_unicode`], but for one or more Unicode codepoints corresponding to a single glyph
+    /// Like [`get_unicode`](Self::get_unicode), but for one or more Unicode codepoints corresponding to a single glyph
     #[cfg(feature = "unicode")]
     pub fn get_unicode_composed(&self, seq: &str) -> Option<RowIter<'_>> {
         let index = self.unicode.get(seq).copied().or_else(|| {
